@@ -300,32 +300,38 @@ def frpn_list(dir_path: str,
     return result
 
 
-def get_next_file_number(out_dir: str, code_mo: str) -> int:
+def get_next_file_number(archive_dir: str, code_mo: str, current_date: datetime) -> int:
     """
     Определяет следующий номер файла для отправки.
-    Номера начинаются с 2, чтобы не конфликтовать с файлами открепления (1.zip)
+    Для каждой новой даты нумерация начинается с 2, чтобы не конфликтовать с файлами открепления (1.zip)
+
+    Формат имени: RPNM{код_МО}{YYMMDD}{номер}.xml.zip
+
+    Args:
+        archive_dir: Путь к директории с исходящими файлами
+        code_mo: Код МО
+        current_date: Текущая дата
+
+    Returns:
+        Следующий номер файла для указанной даты (начиная с 2)
     """
     try:
-        files = os.listdir(out_dir)
+        files = os.listdir(archive_dir)
     except FileNotFoundError:
-        return 2
+        return 2  # Начинаем с 2, если папки нет
 
-    max_num = 1  # Начинаем с 1, так как файлы открепления имеют номер 1
-    prefix = f'RPNM{code_mo}'
+    date_str = current_date.strftime('%y%m%d')
+    prefix = f'RPNM{code_mo}{date_str}'
+
+    max_num = 1  # Начинаем с 1, так как первый файл за дату должен быть с номером 2
 
     for file in files:
         if file.startswith(prefix) and file.endswith('.zip'):
             # Извлекаем номер из имени файла
-            # Формат: RPNM{код_МО}{дата}{номер}.zip
+            # Формат: RPNM{код_МО}{YYMMDD}{номер}.zip
             try:
-                # Имя файла: RPNM8300042603172.zip
-                # prefix: RPNM830004
-                # остаток: 2603172.zip
-                # номер: 2
-                num_part = file[len(prefix):-4]  # Отрезаем префикс и .zip
-                # Убираем дату (6 цифр) из начала
-                if len(num_part) > 6:
-                    num_part = num_part[6:]  # Оставляем только номер
+                # Отрезаем префикс с датой и .zip
+                num_part = file[len(prefix):-4]
                 if num_part.isdigit():
                     num = int(num_part)
                     if num > max_num:
@@ -441,8 +447,11 @@ async def main():
     files_content = {}
     new_patients = []
 
+    # Текущая дата для формирования имени файла
+    current_date = datetime.now()
+
     # Определяем следующий номер файла
-    file_number = get_next_file_number(rpn_out, code_mo)
+    file_number = get_next_file_number(archive_dir, code_mo, current_date)
 
     # Формируем базовое имя для файлов - ИСПРАВЛЕНО
     date_str = datetime.now().strftime('%y%m%d')
