@@ -404,12 +404,12 @@ async def main():
     # Шаг 1: Сбор данных об уже прикрепленных пациентах из ответных файлов
     print("\n[1/4] Сбор успешных прикреплений из ответных файлов...")
     successful_attachments = get_successful_attachments(rpn_in, code_mo)
-    print(f"Найдено {len(successful_attachments)} успешных прикреплений")
+    print(f"✅ Найдено {len(successful_attachments)} успешных прикреплений")
 
     # Шаг 1b: Сбор записей с ошибками из FRPNM файлов
     print("\n[1b/4] Сбор записей с ошибками из FRPNM файлов...")
     failed_attachments = get_failed_attachments(rpn_in, archive_dir, code_mo)
-    print(f"Найдено {len(failed_attachments)} записей с ошибками")
+    print(f"⚠️ Структурных записей с ошибками {len(failed_attachments)}")
 
     # Шаг 2: Получение новых данных от сервера
     print("\n[2/4] Запрос новых данных о прикреплениях...")
