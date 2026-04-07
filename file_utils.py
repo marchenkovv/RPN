@@ -4,7 +4,7 @@ import shutil
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Tuple, Set, List, Optional
+from typing import Tuple, Set, List, Optional, Any
 
 from models import PatientRecord
 
@@ -139,7 +139,7 @@ def get_successful_attachments(
 
 def get_failed_attachments(
         rpn_in_dir: str, archive_dir: str, code_mo: str, date_range: Tuple[str, str]
-) -> Set[Tuple[str, str]]:
+) -> Tuple[set[Any], set[Any]]:
     """Множество short_key (ENP, BP) записей с ошибками из FRPNM."""
     result = set()
     result_2 = set()
