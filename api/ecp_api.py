@@ -9,116 +9,116 @@ class AsyncECP:
         self.timeout = timeout
         self.sess_id = None
         self.client = None
-        self._is_entered = False
 
         self.headers = {
-            # "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "user-agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 YaBrowser/24.6.0.0 Safari/537.36",
+            'user-agent': (
+                'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                '(KHTML, like Gecko) Chrome/124.0.0.0 YaBrowser/24.6.0.0 Safari/537.36'
+            ),
         }
 
     async def __aenter__(self):
-        """Асинхронный контекстный менеджер"""
-        if self._is_entered:
-            raise RuntimeError("AsyncECP instance is already entered")
-
         self.client = httpx.AsyncClient(
             headers=self.headers,
             timeout=self.timeout,
             verify=True,
-            follow_redirects=True
+            follow_redirects=True,
         )
-
-        self.sess_id = await self.user_login()
-        self._is_entered = True
+        self.sess_id = await self._login()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Закрытие при выходе из контекста"""
-        ...
-        # await self.close()
+        await self.close()
 
-    async def user_login(self):
-        """Асинхронная авторизация"""
-        login_url = f"{self.url}/api/user/login"
-        params = {'login': self.login, 'password': self.password}
+    async def _login(self) -> str:
+        data = await self._api_get('/api/user/login', {
+            'login': self.login,
+            'password': self.password,
+        })
+        return data['sess_id']
 
-        try:
-            response = await self.client.get(login_url, params=params)
-            response.raise_for_status()
-
-            json_response = response.json()
-            if json_response['error_code'] == 0:
-                return json_response['data']['sess_id']
-            else:
-                raise Exception('Authorization error: ' + json_response['error_msg'])
-
-        except httpx.RequestError as e:
-            raise Exception(f'Network error during login: {str(e)}')
-        except httpx.HTTPStatusError as e:
-            raise Exception(f'HTTP error during login: {str(e)}')
-
-    async def user_logout(self):
-        """Асинхронный выход из системы"""
-        if not self.sess_id or not self.client:
-            return True
-
-        logout_url = f"{self.url}/api/user/logout"
-        params = {'sess_id': self.sess_id}
-
-        try:
-            response = await self.client.get(logout_url, params=params)
-            response.raise_for_status()
-
-            json_response = response.json()
-            if json_response['error_code'] == 0:
-                return True
-            else:
-                raise Exception('Logout error: ' + json_response['error_msg'])
-
-        except httpx.RequestError as e:
-            raise Exception(f'Network error during logout: {str(e)}')
+    async def _logout(self):
+        if self.sess_id:
+            await self._api_get('/api/user/logout', {'sess_id': self.sess_id})
 
     async def close(self):
-        """Асинхронное закрытие клиента"""
         try:
-            if self.sess_id:
-                await self.user_logout()
-        except:
+            await self._logout()
+        except Exception:
             pass
         finally:
             if self.client:
                 await self.client.aclose()
+                self.client = None
+            self.sess_id = None
 
-    async def _make_request(self, method: str, url, data=None, params=None, headers=None):
-        """Универсальный асинхронный метод для запросов"""
-        if not self.client or not self._is_entered:
-            raise RuntimeError("ECP session not started. Use context manager")
-        try:
-            response = await self.client.request(
-                method=method,
-                url=url,
-                data=data,
-                params=params,
-                headers=headers or self.headers
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.RequestError as e:
-            raise Exception(f'Network error: {str(e)}')
-        except httpx.HTTPStatusError as e:
-            raise Exception(f'HTTP error {e.response.status_code}: {str(e)}')
+    async def _api_get(self, path: str, params: dict) -> dict:
+        """GET-запрос к API с проверкой error_code."""
+        response = await self.client.get(f'{self.url}{path}', params=params)
+        response.raise_for_status()
+        body = response.json()
+        if body.get('error_code') != 0:
+            raise RuntimeError(f'Ошибка API: {body.get('error_msg', 'unknown')}')
+        return body.get('data', {})
 
-    async def service_attachment(self, lpu_id: int, date_range: str):
-        """Запускает формироваться список прикреплённого населения
-        :param lpu_id: 13101871
-        :param export_date_range: '01.12.2025 - 01.12.2025'
-        :return: {'success': True, 'Link': 'export/attached_list//RPNM8300042512011.zip'}
-        """
+    async def _request(self, method: str, url: str, **kwargs) -> dict:
+        """Универсальный запрос с raise_for_status."""
+        if not self.client:
+            raise RuntimeError('Сессия не началась. Используй async with')
+        response = await self.client.request(method, url, **kwargs)
+        response.raise_for_status()
+        return response.json()
+
+    async def service_attachment(self, lpu_id: int, date_range: str) -> dict:
         url = f'{self.url}/?c=ServiceAttachment&m=runExport'
-        params = {
+        return await self._request('POST', url, data={
             'sess_id': self.sess_id,
             'Lpu_id': lpu_id,
             'ExportDateRange': date_range,
             'ExportType': 'attached',
-        }
-        return await self._make_request(method='POST', url=url, data=params)
+        })
+
+    async def download(self, path: str) -> bytes:
+        """Скачивание файла по относительному пути."""
+        url = f'{self.url}/{path.lstrip('/')}'
+        response = await self.client.get(url)
+        response.raise_for_status()
+        return response.content
+
+    async def get_person_card_grid(self, lpu_id: int, date_range: str, type_id: int = 1):
+        """Получаем список прикреплённых по журналу РПН:Прикрепление"""
+        url = f'{self.url}/?c=Person&m=getPersonCardGrid'
+        return await self._request('POST', url, data={
+            'start': 0,
+            'limit': 100,
+            'AttachLpu_id': lpu_id,
+            'PersonCard_begDate': date_range,
+            'LpuRegionType_id': type_id,  # 1, 2
+            'PersonCard_IsAttachCondit': 1,
+            'PersonCardStateType_id': 1,
+            'dontShowUnknowns': 1,
+        })
+
+    async def get_gerson_card_history_list(self, person_id: str):
+        """Получаем список прикреплений пациента по person_id"""
+        url = f'{self.url}/?c=Person&m=getPersonCardHistoryList'
+        return await self._request('POST', url, data={
+            'Person_id': person_id,
+            'AttachType': 'common_region',
+        })
+
+    async def get_person_card(self, person_card_id):
+        """Загружаем данные прикрепления"""
+        url = f'{self.url}/?c=PersonCard&m=getPersonCard'
+        return await self._request('POST', url, data={
+            'PersonCard_id': person_card_id,
+            'attrObjects': [{'object': 'PersonCardEditWindow', 'identField': 'PersonCard_id'}],
+        })
+
+    async def save_person_card(self, person_card_id):
+        """Загружаем данные прикрепления"""
+        url = f'{self.url}/?c=PersonCard&m=savePersonCard'
+        return await self._request('POST', url, data={
+            'PersonCard_id': person_card_id,
+            'attrObjects': [{'object': 'PersonCardEditWindow', 'identField': 'PersonCard_id'}],
+        })
