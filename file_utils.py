@@ -4,7 +4,7 @@ import shutil
 import zipfile
 import xml.etree.ElementTree as ET
 from datetime import datetime
-from typing import Tuple, Set, List, Optional, Any
+from typing import Tuple, Set, List, Optional
 
 from models import PatientRecord
 
@@ -139,10 +139,10 @@ def get_successful_attachments(
 
 def get_failed_attachments(
         rpn_in_dir: str, archive_dir: str, code_mo: str, date_range: Tuple[str, str]
-) -> Tuple[set[Any], set[Any]]:
+) -> Tuple[set[Tuple[str, str]], set[Tuple[str, str]]]:
     """Множество short_key (ENP, BP) записей с ошибками из FRPNM."""
-    result = set()
-    result_2 = set()
+    result = set()  # Для ошибок FRPNM
+    result_2 = set()  # Для ошибок RPNF
 
     # Ошибки RPNF
     for path in rpnf_list(rpn_in_dir, code_mo, detach=False, date_range=date_range):
@@ -198,7 +198,7 @@ def get_failed_attachments(
 def filter_new_attachments(
         patients: List[PatientRecord],
         successful: Set[Tuple],
-        failed: Tuple[str, str],
+        failed: Set[Tuple[str, str]],
 ) -> List[PatientRecord]:
     filtered = []
     for p in sorted(patients, key=lambda p: p.bp):
@@ -220,7 +220,7 @@ def get_next_file_number(archive_dir: str, code_mo: str, date: datetime) -> int:
     except FileNotFoundError:
         return 2
 
-    prefix = f'RPNM{code_mo}{date.strftime('%y%m%d')}'
+    prefix = f'RPNM{code_mo}{date.strftime("%y%m%d")}'
     max_num = 1
 
     for name in files:

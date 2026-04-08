@@ -77,7 +77,8 @@ async def main():
     async with AsyncECP(server, login, password) as ecp:
         result = await ecp.service_attachment(lpu_id, date_range_str)
         if not result.get('success'):
-            exit(f'Ошибка формирования файла на сервере: {' '.join(result.get('Error_Msg').split())}')
+            error_msg = ' '.join(result.get('Error_Msg', '').split())
+            exit(f'Ошибка формирования файла на сервере: {error_msg}')
 
         link = result['Link'].replace('//', '/')
         content = await ecp.download(link)
@@ -85,8 +86,8 @@ async def main():
         # Получаем данные из журнала РПН: Прикрепление
         ter = await ecp.get_person_card_grid(lpu_id, date_range_str)
         ped = await ecp.get_person_card_grid(lpu_id, date_range_str, 2)
-        totalCount = len(ter.get('data') + ped.get('data'))
-        print(f'По журналу прикреплено: {totalCount}')
+        total_count = len(ter.get('data') + ped.get('data'))
+        print(f'По журналу прикреплено: {total_count}')
 
     # --- 3. Парсинг и фильтрация ---
     zip_buffer = io.BytesIO(content)
@@ -118,7 +119,7 @@ async def main():
 
     now = datetime.now()
     file_number = get_next_file_number(archive_dir, code_mo, now)
-    base_name = f'RPNM{code_mo}{now.strftime('%y%m%d')}'
+    base_name = f'RPNM{code_mo}{now.strftime("%y%m%d")}'
 
     zip_name, zip_buf = build_output_zip(source_root, filtered, base_name, file_number)
     save_files(zip_buf, zip_name, rpn_out, archive_dir)

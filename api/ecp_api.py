@@ -58,7 +58,7 @@ class AsyncECP:
         response.raise_for_status()
         body = response.json()
         if body.get('error_code') != 0:
-            raise RuntimeError(f'Ошибка API: {body.get('error_msg', 'unknown')}')
+            raise RuntimeError(f'Ошибка API: {body.get("error_msg", "unknown")}')
         return body.get('data', {})
 
     async def _request(self, method: str, url: str, **kwargs) -> dict:
