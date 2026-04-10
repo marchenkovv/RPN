@@ -86,7 +86,9 @@ async def main():
         # Получаем данные из журнала РПН: Прикрепление
         ter = await ecp.get_person_card_grid(lpu_id, date_range_str)
         ped = await ecp.get_person_card_grid(lpu_id, date_range_str, 2)
-        total_count = len(ter.get('data') + ped.get('data'))
+        ter_data = ter.get('data') or []
+        ped_data = ped.get('data') or []
+        total_count = len(ter_data + ped_data)
         print(f'По журналу прикреплено: {total_count}')
 
     # --- 3. Парсинг и фильтрация ---
