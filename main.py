@@ -126,6 +126,29 @@ async def main():
 
     print(f'\n✅ Готово! Отправлено: {len(filtered)}, файл: {zip_name}')
 
+    # --- Собираем всех, кто будет в системе (уже прикреплённые + новые) ---
+    print("\n[4/5] Итоговая статистика:")
+
+    # После фильтрации
+    missing = find_missing_patients(total_data, successful, filtered)
+
+    print(f'Успешно ранее прикреплённых (RPNF): {len(successful)}')
+    print(f'По журналу прикреплений: {len(total_data)}')
+    print(f'Новых в выгрузке: {len(filtered)}')
+    print(f'Отсутствуют выгрузке: {len(missing)}')
+
+    if missing:
+        print(f'\n❌ Пациенты из журнала, которых НЕТ в выгрузке:')
+        for m in missing:
+            print(
+                f'   {m.get("Person_SurName")} {m.get("Person_FirName")} {m.get("Person_SecName")} ({m.get("PersonBirthDay")}) person_id: {m.get("Person_id")}')
+
+        # Сохраним в файл для анализа, вдруг пригодится
+        import json
+        with open('missing_patients.json', 'w', encoding='utf-8') as f:
+            json.dump(missing, f, ensure_ascii=False, indent=2)
+        print(f'\nПолный список сохранён в missing_patients.json')
+
 
 if __name__ == '__main__':
     asyncio.run(main())
