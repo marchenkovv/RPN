@@ -81,6 +81,7 @@ async def main():
             exit(f'Ошибка формирования файла на сервере: {error_msg}')
 
         link = result['Link'].replace('//', '/')
+        original_filename = link.split('/')[-1]
         content = await ecp.download(link)
 
         # Получаем данные из журнала РПН: Прикрепление
@@ -117,11 +118,7 @@ async def main():
     # --- 4. Формирование и сохранение ---
     print('\n[4/4] Сохранение...')
 
-    now = datetime.now()
-    file_number = get_next_file_number(archive_dir, code_mo, now)
-    base_name = f'RPNM{code_mo}{now.strftime("%y%m%d")}'
-
-    zip_name, zip_buf = build_output_zip(source_root, filtered, base_name, file_number)
+    zip_name, zip_buf = build_output_zip(source_root, filtered, original_filename)
     save_files(zip_buf, zip_name, rpn_out, archive_dir)
 
     print(f'\n✅ Готово! Отправлено: {len(filtered)}, файл: {zip_name}')
