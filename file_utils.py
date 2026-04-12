@@ -214,25 +214,6 @@ def filter_new_attachments(
 
 # --------------- Формирование файла ---------------
 
-def get_next_file_number(archive_dir: str, code_mo: str, date: datetime) -> int:
-    """Следующий номер файла (начиная с 2, т.к. 1 - открепление)."""
-    try:
-        files = os.listdir(archive_dir)
-    except FileNotFoundError:
-        return 2
-
-    prefix = f'RPNM{code_mo}{date.strftime("%y%m%d")}'
-    max_num = 1
-
-    for name in files:
-        if name.startswith(prefix) and name.endswith('.zip'):
-            num_str = name[len(prefix):-4]
-            if num_str.isdigit():
-                max_num = max(max_num, int(num_str))
-
-    return max_num + 1
-
-
 def build_output_zip(
         source_root: ET.Element,
         filtered_patients: List[PatientRecord],
