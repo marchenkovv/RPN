@@ -67,9 +67,11 @@ async def main():
 
     print('\n[2/4] Сбор ошибок из FRPNM и RPNF...')
     failed_frpnm, failed_rpnf = get_failed_attachments(rpn_in, archive_dir, code_mo, date_range)
-    print(f'FRPNM: {len(failed_frpnm)}')
-    print(f'RPNF: {len(failed_rpnf)}')
-    print(failed_rpnf)
+    print(f'Количество FRPNM: {len(failed_frpnm)}')
+    print(f'Количество RPNF: {len(failed_rpnf)}')
+    print(f'Список RPNF по которым были ошибки:')
+    for row in failed_rpnf:
+        print(row)
 
     # --- 2. Скачивание новых данных ---
     print(f'\n[3/4] Запрос данных с сервера ({date_range_str})...')
