@@ -279,3 +279,65 @@ def save_files(zip_buffer: io.BytesIO, filename: str, out_dir: str, archive_dir:
 
     shutil.copy2(out_path, os.path.join(archive_dir, filename))
     print(f'Сохранено: {out_path}')
+
+
+def find_missing_patients(
+        total_data: list,  # из журнала прикреплений
+        successful: Set[Tuple],  # успешно прикреплённые (из RPNF)
+        filtered: List[PatientRecord]  # новые для отправки
+) -> list:
+    """
+    Возвращает список пациентов из total_data, которых нет в системе
+    (ни среди успешно прикреплённых, ни среди новых для отправки)
+    """
+
+    def normalize_string(s: str) -> str:
+        """Нормализует строку: убирает пробелы, приводит к верхнему регистру"""
+        if not s:
+            return ''
+        return ''.join(s.upper().split())
+
+    def normalize_date(date_str: str) -> str:
+        """Приводит дату к формату ДД.ММ.ГГГГ"""
+        if not date_str:
+            return ''
+        # Если дата в формате ГГГГ-ММ-ДД
+        if '-' in date_str and len(date_str) == 10:
+            parts = date_str.split('-')
+            return f'{parts[2]}.{parts[1]}.{parts[0]}'
+        return date_str
+
+    # Собираем ключи из успешно прикреплённых
+    successful_keys = set()
+    for item in successful:
+        # item = (enp, bp, fam, im, ot, dr)
+        if len(item) == 6:
+            _, _, fam, im, ot, dr = item
+            if fam and im and dr:  # только если есть ФИО и дата
+                key = f'{normalize_string(fam)}_{normalize_string(im)}_{normalize_string(ot)}_{normalize_date(dr)}'
+                successful_keys.add(key)
+
+    # Собираем ключи из новых пациентов
+    new_keys = set()
+    for p in filtered:
+        if p.fam and p.im and p.dr:
+            key = f'{normalize_string(p.fam)}_{normalize_string(p.im)}_{normalize_string(p.ot)}_{normalize_date(p.dr)}'
+            new_keys.add(key)
+
+    # Объединяем
+    all_system_keys = successful_keys.union(new_keys)
+
+    # Ищем отсутствующих
+    missing = []
+    for row in total_data:
+        fam = normalize_string(row.get('Person_SurName', ''))
+        im = normalize_string(row.get('Person_FirName', ''))
+        ot = normalize_string(row.get('Person_SecName', ''))
+        dr = normalize_date(row.get('PersonBirthDay', ''))
+
+        key = f"{fam}_{im}_{ot}_{dr}"
+
+        if key not in all_system_keys:
+            missing.append(row)
+
+    return missing
