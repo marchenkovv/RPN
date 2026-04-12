@@ -217,17 +217,16 @@ def filter_new_attachments(
 def build_output_zip(
         source_root: ET.Element,
         filtered_patients: List[PatientRecord],
-        base_filename: str,
-        file_number: int,
+        zip_name: str,  # имя файла от сервера, например RPNM830004262604122.zip
 ) -> Tuple[str, io.BytesIO]:
     """
-    Создаёт ZIP с отфильтрованным XML.
+    Создаёт ZIP с отфильтрованным XML, сохраняя исходное имя файла.
 
     Returns:
         (имя_zip_файла, буфер_с_содержимым)
     """
-    xml_name = f'{base_filename}{file_number}.xml'
-    zip_name = f'{base_filename}{file_number}.zip'
+    # Извлекаем базовое имя без расширения .zip
+    base_name = zip_name.replace('.zip', '')
 
     # Множество для быстрого поиска
     allowed_keys = {p.full_key for p in filtered_patients}
@@ -238,10 +237,6 @@ def build_output_zip(
     # Копируем заголовок
     zglv = source_root.find('ZGLV')
     if zglv is not None:
-        # Обновляем FILENAME
-        fn_elem = zglv.find('FILENAME')
-        if fn_elem is not None:
-            fn_elem.text = f'{base_filename}{file_number}'
         new_root.append(zglv)
 
     # Добавляем только отфильтрованные ZAP
@@ -272,9 +267,9 @@ def build_output_zip(
 
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(xml_name, xml_buf.getvalue())
+        zf.writestr(f'{base_name}.xml', xml_buf.getvalue())
 
-    return zip_name, zip_buf
+    return zip_name, zip_buf  # возвращаем исходное имя файла
 
 
 def save_files(zip_buffer: io.BytesIO, filename: str, out_dir: str, archive_dir: str):
