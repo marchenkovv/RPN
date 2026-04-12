@@ -1,3 +1,4 @@
+# noinspection PyPep8Naming
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Tuple
