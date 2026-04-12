@@ -43,6 +43,7 @@ class AsyncECP:
         if self.sess_id:
             await self._api_get('/api/user/logout', {'sess_id': self.sess_id})
 
+    # noinspection PyBroadException
     async def close(self):
         try:
             await self._logout()
