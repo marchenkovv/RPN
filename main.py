@@ -14,7 +14,7 @@ from file_utils import (
     filter_new_attachments,
     get_next_file_number,
     build_output_zip,
-    save_files,
+    save_files, find_missing_patients,
 )
 from models import PatientRecord
 
