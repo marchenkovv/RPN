@@ -12,7 +12,6 @@ from file_utils import (
     get_successful_attachments,
     get_failed_attachments,
     filter_new_attachments,
-    get_next_file_number,
     build_output_zip,
     save_files, find_missing_patients,
 )
