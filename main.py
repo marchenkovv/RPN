@@ -127,7 +127,7 @@ async def main():
     print(f'\n✅ Готово! Отправлено: {len(filtered)}, файл: {zip_name}')
 
     # --- Собираем всех, кто будет в системе (уже прикреплённые + новые) ---
-    print("\n[4/5] Итоговая статистика:")
+    print('\n[4/5] Итоговая статистика:')
 
     # После фильтрации
     missing = find_missing_patients(total_data, successful, filtered)
