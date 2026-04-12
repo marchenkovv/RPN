@@ -104,13 +104,13 @@ class AsyncECP:
             if attempt == 0:
                 match = re.search(r'RPNM\d{12}(\d+)\.zip$', filename)
                 if match and match.group(1) == '1':
-                    print(f"Обнаружен файл с номером 1: {filename}. Повторное формирование...")
+                    print(f'Обнаружен файл с номером 1: {filename}. Повторное формирование...')
                     continue  # делаем вторую попытку
 
             # Иначе возвращаем результат
-            print(f"Использую файл: {filename}")
+            print(f'Использую файл: {filename}')
             return result
-        raise RuntimeError("Не удалось получить файл после 2 попыток")
+        raise RuntimeError('Не удалось получить файл после 2 попыток')
 
     async def download(self, path: str) -> bytes:
         """Скачивание файла по относительному пути."""
