@@ -201,7 +201,7 @@ def filter_new_attachments(
         failed: Set[Tuple[str, str]],
 ) -> List[PatientRecord]:
     filtered = []
-    for p in sorted(patients, key=lambda p: p.bp):
+    for p in sorted(patients, key=lambda record: record.bp):
         if p.full_key in successful:
             print(f'✅ Пропуск (уже прикреплён): ENP={p.enp} BP={p.bp}')
         elif p.short_key in failed:
