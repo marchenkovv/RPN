@@ -87,8 +87,8 @@ async def main():
         content = await ecp.download(link)
 
         # Получаем данные из журнала РПН: Прикрепление
-        ter = await ecp.get_person_card_grid(lpu_id, date_range_str)
-        ped = await ecp.get_person_card_grid(lpu_id, date_range_str, 2)
+        ter = await ecp.get_person_card_grid(lpu_id, date_range_str, type_id=1)
+        ped = await ecp.get_person_card_grid(lpu_id, date_range_str, type_id=2)
         ter_data = ter.get('data') or []
         ped_data = ped.get('data') or []
         total_data = ter_data + ped_data
