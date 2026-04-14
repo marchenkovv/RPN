@@ -1,3 +1,4 @@
+# noinspection PyPep8Naming
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from typing import Tuple
@@ -23,14 +24,13 @@ class PatientRecord:
 
     @classmethod
     def from_xml(cls, zap: ET.Element) -> 'PatientRecord':
-        pacient = zap.find('PACIENT')
         return cls(
             enp=zap.findtext('ENP', ''),
             bp=zap.findtext('BP', ''),
-            fam=pacient.findtext('FAM', '') if pacient is not None else '',
-            im=pacient.findtext('IM', '') if pacient is not None else '',
-            ot=pacient.findtext('OT', '') if pacient is not None else '',
-            dr=pacient.findtext('DR', '') if pacient is not None else '',
+            fam=zap.findtext('FAM', ''),
+            im=zap.findtext('IM', ''),
+            ot=zap.findtext('OT', ''),
+            dr=zap.findtext('DR', ''),
         )
 
     @property

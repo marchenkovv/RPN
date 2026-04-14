@@ -2,6 +2,7 @@ import asyncio
 import io
 import os
 import zipfile
+# noinspection PyPep8Naming
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from dotenv import load_dotenv
@@ -11,9 +12,8 @@ from file_utils import (
     get_successful_attachments,
     get_failed_attachments,
     filter_new_attachments,
-    get_next_file_number,
     build_output_zip,
-    save_files,
+    save_files, find_missing_patients,
 )
 from models import PatientRecord
 
@@ -67,9 +67,11 @@ async def main():
 
     print('\n[2/4] Сбор ошибок из FRPNM и RPNF...')
     failed_frpnm, failed_rpnf = get_failed_attachments(rpn_in, archive_dir, code_mo, date_range)
-    print(f'FRPNM: {len(failed_frpnm)}')
-    print(f'RPNF: {len(failed_rpnf)}')
-    print(failed_rpnf)
+    print(f'Количество FRPNM: {len(failed_frpnm)}')
+    print(f'Количество RPNF: {len(failed_rpnf)}')
+    print(f'Список RPNF по которым были ошибки:')
+    for row in failed_rpnf:
+        print(row)
 
     # --- 2. Скачивание новых данных ---
     print(f'\n[3/4] Запрос данных с сервера ({date_range_str})...')
@@ -81,15 +83,15 @@ async def main():
             exit(f'Ошибка формирования файла на сервере: {error_msg}')
 
         link = result['Link'].replace('//', '/')
+        original_filename = link.split('/')[-1]
         content = await ecp.download(link)
 
         # Получаем данные из журнала РПН: Прикрепление
-        ter = await ecp.get_person_card_grid(lpu_id, date_range_str)
-        ped = await ecp.get_person_card_grid(lpu_id, date_range_str, 2)
+        ter = await ecp.get_person_card_grid(lpu_id, date_range_str, type_id=1)
+        ped = await ecp.get_person_card_grid(lpu_id, date_range_str, type_id=2)
         ter_data = ter.get('data') or []
         ped_data = ped.get('data') or []
-        total_count = len(ter_data + ped_data)
-        print(f'По журналу прикреплено: {total_count}')
+        total_data = ter_data + ped_data
 
     # --- 3. Парсинг и фильтрация ---
     zip_buffer = io.BytesIO(content)
@@ -119,14 +121,33 @@ async def main():
     # --- 4. Формирование и сохранение ---
     print('\n[4/4] Сохранение...')
 
-    now = datetime.now()
-    file_number = get_next_file_number(archive_dir, code_mo, now)
-    base_name = f'RPNM{code_mo}{now.strftime("%y%m%d")}'
-
-    zip_name, zip_buf = build_output_zip(source_root, filtered, base_name, file_number)
+    zip_name, zip_buf = build_output_zip(source_root, filtered, original_filename)
     save_files(zip_buf, zip_name, rpn_out, archive_dir)
 
     print(f'\n✅ Готово! Отправлено: {len(filtered)}, файл: {zip_name}')
+
+    # --- Собираем всех, кто будет в системе (уже прикреплённые + новые) ---
+    print('\n[4/5] Итоговая статистика:')
+
+    # После фильтрации
+    missing = find_missing_patients(total_data, successful, filtered)
+
+    print(f'Успешно ранее прикреплённых (RPNF): {len(successful)}')
+    print(f'По журналу прикреплений: {len(total_data)}')
+    print(f'Новых в выгрузке: {len(filtered)}')
+    print(f'Отсутствуют выгрузке: {len(missing)}')
+
+    if missing:
+        print(f'\n❌ Пациенты из журнала, которых НЕТ в выгрузке:')
+        for m in missing:
+            print(
+                f'   {m.get("Person_SurName")} {m.get("Person_FirName")} {m.get("Person_SecName")} ({m.get("PersonBirthDay")}) person_id: {m.get("Person_id")}')
+
+        # Сохраним в файл для анализа, вдруг пригодится
+        import json
+        with open('missing_patients.json', 'w', encoding='utf-8') as f:
+            json.dump(missing, f, ensure_ascii=False, indent=2)
+        print(f'\nПолный список сохранён в missing_patients.json')
 
 
 if __name__ == '__main__':

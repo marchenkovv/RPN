@@ -1,3 +1,5 @@
+import re
+
 import httpx
 
 
@@ -41,6 +43,7 @@ class AsyncECP:
         if self.sess_id:
             await self._api_get('/api/user/logout', {'sess_id': self.sess_id})
 
+    # noinspection PyBroadException
     async def close(self):
         try:
             await self._logout()
@@ -70,13 +73,44 @@ class AsyncECP:
         return response.json()
 
     async def service_attachment(self, lpu_id: int, date_range: str) -> dict:
+        """
+        Запрос файла прикреплений. Если получен файл с номером 1,
+        автоматически делает повторный запрос для получения файла с номером 2.
+
+        Returns:
+            (content, filename): содержимое файла и имя файла
+        """
         url = f'{self.url}/?c=ServiceAttachment&m=runExport'
-        return await self._request('POST', url, data={
-            'sess_id': self.sess_id,
-            'Lpu_id': lpu_id,
-            'ExportDateRange': date_range,
-            'ExportType': 'attached',
-        })
+
+        for attempt in range(2):  # максимум 2 попытки
+            result = await self._request('POST', url, data={
+                'sess_id': self.sess_id,
+                'Lpu_id': lpu_id,
+                'ExportDateRange': date_range,
+                'ExportType': 'attached',
+            })
+
+            # тестируем перевыгрузку
+            # if attempt == 0:
+            #     result = {'success': True, 'Link': 'export/attached_list//RPNM8300042604121.zip'}
+
+            if not result.get('success'):
+                return result
+
+            link = result['Link'].replace('//', '/')
+            filename = link.split('/')[-1]
+
+            # Если это первая попытка И файл с номером 1 — продолжаем цикл
+            if attempt == 0:
+                match = re.search(r'RPNM\d{12}(\d+)\.zip$', filename)
+                if match and match.group(1) == '1':
+                    print(f'Обнаружен файл с номером 1: {filename}. Повторное формирование...')
+                    continue  # делаем вторую попытку
+
+            # Иначе возвращаем результат
+            print(f'Использую файл: {filename}')
+            return result
+        raise RuntimeError('Не удалось получить файл после 2 попыток')
 
     async def download(self, path: str) -> bytes:
         """Скачивание файла по относительному пути."""
@@ -85,12 +119,12 @@ class AsyncECP:
         response.raise_for_status()
         return response.content
 
-    async def get_person_card_grid(self, lpu_id: int, date_range: str, type_id: int = 1):
+    async def get_person_card_grid(self, lpu_id: int, date_range: str, limit: int = 250, type_id: int = 1):
         """Получаем список прикреплённых по журналу РПН:Прикрепление"""
         url = f'{self.url}/?c=Person&m=getPersonCardGrid'
         return await self._request('POST', url, data={
             'start': 0,
-            'limit': 100,
+            'limit': limit,
             'AttachLpu_id': lpu_id,
             'PersonCard_begDate': date_range,
             'LpuRegionType_id': type_id,  # 1, 2
