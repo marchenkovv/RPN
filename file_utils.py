@@ -335,7 +335,7 @@ def find_missing_patients(
         ot = normalize_string(row.get('Person_SecName', ''))
         dr = normalize_date(row.get('PersonBirthDay', ''))
 
-        key = t'{fam}_{im}_{ot}_{dr}'
+        key = f'{fam}_{im}_{ot}_{dr}'
 
         if key not in all_system_keys:
             missing.append(row)
