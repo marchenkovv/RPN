@@ -58,20 +58,12 @@ async def main():
 
     date_range = (date_from, date_to)
 
-    print(f'Период: {date_range_str}')
-
     # --- 1. Сбор уже обработанных ---
     print('\n[1/4] Сбор успешных прикреплений...')
     successful = get_successful_attachments(rpn_in, code_mo, date_range)
-    print(f'Успешных: {len(successful)}')
 
     print('\n[2/4] Сбор ошибок из FRPNM и RPNF...')
     failed_frpnm, failed_rpnf = get_failed_attachments(rpn_in, archive_dir, code_mo, date_range)
-    print(f'Количество FRPNM: {len(failed_frpnm)}')
-    print(f'Количество RPNF: {len(failed_rpnf)}')
-    print(f'Список RPNF по которым были ошибки:')
-    for row in failed_rpnf:
-        print(row)
 
     # --- 2. Скачивание новых данных ---
     print(f'\n[3/4] Запрос данных с сервера ({date_range_str})...')
@@ -108,11 +100,9 @@ async def main():
         for zap in source_root.findall('ZAP')
         if PatientRecord.from_xml(zap).is_valid and zap.find('EP') is None  # + исключаем откреплённых
     ]
-    print(f'Всего в выгрузке: {len(new_patients)}')
 
     # Фильтруем
     filtered = filter_new_attachments(new_patients, successful, failed_frpnm)
-    print(f'После фильтрации: {len(filtered)}')
 
     if not filtered:
         print('\nНет пациентов для отправки.')
@@ -132,10 +122,16 @@ async def main():
     # После фильтрации
     missing = find_missing_patients(total_data, successful, filtered)
 
+    print(f'Период: {date_range_str}')
+    print(f'Количество FRPNM с ошибками: {len(failed_frpnm)}')
+    print(f'Количество RPNF с ошибками: {len(failed_rpnf)}')
     print(f'Успешно ранее прикреплённых (RPNF): {len(successful)}')
     print(f'По журналу прикреплений: {len(total_data)}')
-    print(f'Новых в выгрузке: {len(filtered)}')
+    print(f'Всего в выгрузке: {len(new_patients)}')
+    print(f'После фильтрации новых в выгрузке: {len(filtered)}')
     print(f'Отсутствуют выгрузке: {len(missing)}')
+
+    # TODO: Проверить новых прикреплённых на ошибки из предыдущей отправки | STATUS == 0 / Сохранить errors_patients.json
 
     if missing:
         print(f'\n❌ Пациенты из журнала, которых НЕТ в выгрузке:')
@@ -149,6 +145,9 @@ async def main():
             json.dump(missing, f, ensure_ascii=False, indent=2)
         print(f'\nПолный список сохранён в missing_patients.json')
 
+    print(f'\nСписок RPNF записей по которым были ошибки:')
+    for row in failed_rpnf:
+        print(row)
 
 if __name__ == '__main__':
     asyncio.run(main())
