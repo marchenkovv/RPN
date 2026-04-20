@@ -13,10 +13,17 @@ class PatientRecord:
     im: str
     ot: str
     dr: str
+    status: str
+    comment: str
+
 
     @property
     def full_key(self) -> Tuple[str, ...]:
         return self.enp, self.bp, self.fam, self.im, self.ot, self.dr
+
+    @property
+    def get_errors(self) -> Tuple[str, ...]:
+        return self.enp, self.bp, self.fam, self.im, self.ot, self.dr, self.status, self.comment
 
     @property
     def short_key(self) -> Tuple[str, str]:
@@ -31,6 +38,8 @@ class PatientRecord:
             im=zap.findtext('IM', ''),
             ot=zap.findtext('OT', ''),
             dr=zap.findtext('DR', ''),
+            status=zap.findtext('STATUS', ''),
+            comment=zap.findtext('COMMENT', ''),
         )
 
     @property
