@@ -13,7 +13,7 @@ from file_utils import (
     get_failed_attachments,
     filter_new_attachments,
     build_output_zip,
-    save_files, find_missing_patients,
+    save_files, find_missing_patients, rpnf_list, iter_zap_from_zip,
 )
 from models import PatientRecord
 
@@ -131,7 +131,26 @@ async def main():
     print(f'После фильтрации новых в выгрузке: {len(filtered)}')
     print(f'Отсутствуют выгрузке: {len(missing)}')
 
-    # TODO: Проверить новых прикреплённых на ошибки из предыдущей отправки | STATUS == 0 / Сохранить errors_patients.json
+    # Ошибки из предыдущей отправки
+    last_rpn = os.listdir(rpn_in)[-1:][0]
+    last_rpn_errors = set()
+
+    try:
+        for zap in iter_zap_from_zip(os.path.join(rpn_in, last_rpn)):
+            if zap.findtext('STATUS') != '0':
+                continue
+            p = PatientRecord.from_xml(zap)
+            if p.is_valid:
+                last_rpn_errors.add(p.get_errors)
+    except Exception as e:
+        print(f'{e}')
+
+    if len(last_rpn_errors) > 0:
+        print(f'\nОшибки в предыдущей выгрузке {last_rpn}:')
+        for row in last_rpn_errors:
+            print(row)
+    else:
+        print(f'\nОшибок в предыдущей выгрузке {last_rpn} нет')
 
     if missing:
         print(f'\n❌ Пациенты из журнала, которых НЕТ в выгрузке:')
@@ -146,7 +165,7 @@ async def main():
         print(f'\nПолный список сохранён в missing_patients.json')
 
     print(f'\nСписок RPNF записей по которым были ошибки:')
-    for row in failed_rpnf:
+    for row in sorted(failed_rpnf, key=lambda x:x[1]):
         print(row)
 
 if __name__ == '__main__':
