@@ -310,9 +310,9 @@ def find_missing_patients(
     # Собираем ключи из успешно прикреплённых
     successful_keys = set()
     for item in successful:
-        # item = (enp, bp, fam, im, ot, dr)
+        # item = (fam, im, ot, dr, enp, bp)
         if len(item) == 6:
-            _, _, fam, im, ot, dr = item
+            fam, im, ot, dr, _, _, = item
             if fam and im and dr:  # только если есть ФИО и дата
                 key = f'{normalize_string(fam)}_{normalize_string(im)}_{normalize_string(ot)}_{normalize_date(dr)}'
                 successful_keys.add(key)
