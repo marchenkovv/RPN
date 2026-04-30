@@ -263,7 +263,7 @@ def build_output_zip(
 
     # Сериализация
     xml_buf = io.BytesIO()
-    ET.ElementTree(new_root).write(xml_buf, encoding='Windows-1251', xml_declaration=True)
+    ET.ElementTree(new_root).write(xml_buf, encoding='Windows-1251', xml_declaration=True)  # type: ignore
 
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
