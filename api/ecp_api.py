@@ -119,7 +119,7 @@ class AsyncECP:
         response.raise_for_status()
         return response.content
 
-    async def get_person_card_grid(self, lpu_id: int, date_range: str, limit: int = 250, type_id: int = 1):
+    async def get_person_card_grid(self, lpu_id: int, date_range: str, limit: int = 500, type_id: int = 1):
         """Получаем список прикреплённых по журналу РПН:Прикрепление"""
         url = f'{self.url}/?c=Person&m=getPersonCardGrid'
         return await self._request('POST', url, data={
