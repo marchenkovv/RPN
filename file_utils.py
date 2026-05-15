@@ -140,24 +140,16 @@ def get_successful_attachments(
 
 def get_failed_attachments(
         rpn_in_dir: str, archive_dir: str, code_mo: str, date_range: Tuple[str, str]
-) -> Tuple[set[Tuple[str, str]], set[Tuple[str, str]]]:
-    """Множество short_key (ENP, BP) записей с ошибками из FRPNM."""
-    result = set()  # Для ошибок FRPNM
-    result_2 = set()  # Для ошибок RPNF
+) -> Tuple[dict, set]:
+    """
+    Returns:
+        - failed_data: dict {(enp, bp): {'field': 'OKATO', 'old_value': '71140'}}
+        - failed_rpnf: set of full_key — ошибки из RPNF (STATUS=0)
+    """
+    failed_data = {}  # {(enp, bp): {'field': 'OKATO', 'old_value': '71140'}}
+    failed_rpnf = set()
 
-    # Ошибки RPNF
-    for path in rpnf_list(rpn_in_dir, code_mo, detach=False, date_range=date_range):
-        try:
-            for zap in iter_zap_from_zip(path):
-                if zap.findtext('STATUS') != '0':
-                    continue
-                p = PatientRecord.from_xml(zap)
-                if p.is_valid:
-                    result_2.add(p.full_key)
-        except Exception as e:
-            print(f'Ошибка при обработке {path}: {e}')
-
-    # Ошибки FRPNM
+    # --- Собираем ошибки из FRPNM ---
     for frpn_path in frpn_list(rpn_in_dir, code_mo, date_range=date_range):
         try:
             root = parse_zip_xml(frpn_path)
@@ -169,13 +161,27 @@ def get_failed_attachments(
         if not fname_i:
             continue
 
-        # Собираем все UID с ошибками
-        error_uids = {pr.findtext('UID', '') for pr in root.findall('PR')}
-        error_uids.discard('')
+        # Собираем ошибки: UID -> (поле, старое_значение)
+        error_by_uid = {}
+        for pr in root.findall('PR'):
+            uid = pr.findtext('UID', '')
+            im_pol = pr.findtext('IM_POL', '')  # поле с ошибкой (OKATO, ENP и т.д.)
+            comment = pr.findtext('COMMENT', '')
 
-        if not error_uids:
+            # Из комментария извлекаем старое значение
+            # Пример: "71140 нарушает ограничение minLength..."
+            old_value = ''
+            if comment:
+                # Берём первое слово до пробела
+                old_value = comment.split()[0] if comment.split() else ''
+
+            if uid and im_pol:
+                error_by_uid[uid] = (im_pol, old_value)
+
+        if not error_by_uid:
             continue
 
+        # Ищем исходный RPNM в архиве
         rpnm_path = os.path.join(archive_dir, f'{fname_i}.zip')
         if not os.path.exists(rpnm_path):
             print(f'Файл не найден: {rpnm_path}')
@@ -183,15 +189,32 @@ def get_failed_attachments(
 
         try:
             for zap in iter_zap_from_zip(rpnm_path):
-                if zap.findtext('UID', '') in error_uids:
+                uid = zap.findtext('UID', '')
+                if uid in error_by_uid:
                     p = PatientRecord.from_xml(zap)
                     if p.is_valid:
-                        result.add(p.short_key)
-                        print(f'❌ Найдена ошибка: ENP={p.enp} BP={p.bp}')
+                        error_field, old_value = error_by_uid[uid]
+                        failed_data[(p.enp, p.bp)] = {
+                            'field': error_field,
+                            'old_value': old_value
+                        }
+                        print(f'❌ Найдена ошибка: ENP={p.enp} BP={p.bp} FIELD={error_field} OLD_VALUE={old_value}')
         except Exception as e:
             print(f'Ошибка при чтении {rpnm_path}: {e}')
 
-    return result, result_2
+    # --- Собираем ошибки из RPNF (без изменений) ---
+    for path in rpnf_list(rpn_in_dir, code_mo, detach=False, date_range=date_range):
+        try:
+            for zap in iter_zap_from_zip(path):
+                if zap.findtext('STATUS') != '0':
+                    continue
+                p = PatientRecord.from_xml(zap)
+                if p.is_valid:
+                    failed_rpnf.add(p.full_key)
+        except Exception as e:
+            print(f'Ошибка при обработке {path}: {e}')
+
+    return failed_data, failed_rpnf
 
 
 # --------------- Фильтрация ---------------
@@ -199,16 +222,51 @@ def get_failed_attachments(
 def filter_new_attachments(
         patients: List[PatientRecord],
         successful: Set[Tuple],
-        failed: Set[Tuple[str, str]],
+        failed_data: dict,  # пример {(enp, bp): {'field': 'OKATO', 'old_value': '71140'}}
 ) -> List[PatientRecord]:
+    """
+    Фильтрует пациентов.
+    - Если уже прикреплён успешно -> пропускаем
+    - Если есть ошибка в failed_data:
+        - Берём поле и старое значение
+        - Сравниваем с текущим значением в новой выгрузке
+        - Если значение ИЗМЕНИЛОСЬ -> добавляем в выгрузку
+        - Если НЕ ИЗМЕНИЛОСЬ -> пропускаем
+    """
     filtered = []
+
     for p in sorted(patients, key=lambda record: record.bp):
+        # Проверка 1: уже успешно прикреплён
         if p.full_key in successful:
-            print(f'✅ Пропуск (уже прикреплён): ENP={p.enp} BP={p.bp}')
-        elif p.short_key in failed:
-            print(f'❌ Пропуск (ошибка ранее): ENP={p.enp} BP={p.bp}')
+            print(f'⏭️ Пропуск (уже прикреплён): ENP={p.enp} BP={p.bp}')
+            continue
+
+        patient_key = (p.enp, p.bp)
+
+        # Проверка 2: есть ли ошибка по этому пациенту
+        if patient_key in failed_data:
+            error_info = failed_data[patient_key]
+            error_field = error_info['field']  # 'OKATO', 'ENP', 'DR' и т.д.
+            old_value = error_info['old_value']
+
+            # Получаем текущее значение поля
+            field_name = error_field.lower()
+            current_value = getattr(p, error_field.lower(), '')
+
+            # Сравниваем
+            if current_value != old_value:
+                print(f'✅ Исправлено! ENP={p.enp} BP={p.bp} FIELD={error_field}: "{old_value}" -> "{current_value}"')
+                # Значение изменилось -> добавляем в выгрузку
+                filtered.append(p)
+            else:
+                print(
+                    f'❌ Пропуск (не исправлено): ENP={p.enp} BP={p.bp} FIELD={error_field} всё ещё = "{current_value}"')
+                continue
         else:
+            # Нет ошибок -> добавляем
+            print(f'➕ Добавляем: ENP={p.enp} BP={p.bp}')
             filtered.append(p)
+
     return filtered
 
 
