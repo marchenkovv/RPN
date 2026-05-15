@@ -34,7 +34,7 @@ class TFOMS:
         # Константы класса
         REQUEST_INTERVAL = 2  # секунды между запросами
         DEFAULT_TIMEOUT = 30.0
-        USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 YaBrowser/25.12.0.0 Safari/537.36'
+        USER_AGENT = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 YaBrowser/26.3.0.0 Safari/537.36'
 
         def __init__(self, base_url: str, login: str, password: str):
             """
@@ -53,7 +53,8 @@ class TFOMS:
 
             # Общие заголовки
             self.headers = {
-                'User-Agent': self.USER_AGENT
+                'User-Agent': self.USER_AGENT,
+                'Content-Type': 'application/json; charset=utf-8'
             }
 
         @staticmethod
