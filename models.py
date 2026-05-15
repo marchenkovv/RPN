@@ -16,6 +16,7 @@ class PatientRecord:
     ep: str
     status: str
     comment: str
+    okato: str
 
     @property
     def full_key(self) -> Tuple[str, ...]:
@@ -45,6 +46,7 @@ class PatientRecord:
             ep=zap.findtext('EP', ''),
             status=zap.findtext('STATUS', ''),
             comment=zap.findtext('COMMENT', ''),
+            okato=zap.findtext('OKATO', '')
         )
 
     @property
