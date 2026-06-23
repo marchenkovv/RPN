@@ -2,12 +2,188 @@ import io
 import os
 import shutil
 import zipfile
+import asyncio
 # noinspection PyPep8Naming
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Tuple, Set, List, Optional
-
+from concurrent.futures import ThreadPoolExecutor
 from models import PatientRecord
+
+# Глобальный семафор для контроля параллелизма
+_FILE_SEM = asyncio.Semaphore(10)
+
+
+async def _process_one_rpnf_for_success(file_path: str) -> set:
+    """Обрабатывает один RPNF-файл, возвращает множество успешных full_key."""
+    async with _FILE_SEM:
+        loop = asyncio.get_running_loop()
+        # Запускаем синхронный парсинг в потоке
+        result = await loop.run_in_executor(
+            None, _parse_rpnf_for_success, file_path
+        )
+    return result
+
+
+def _parse_rpnf_for_success(file_path: str) -> set:
+    """Синхронная обёртка: извлекает из ZIP все ZAP со STATUS=1."""
+    local_set = set()
+    try:
+        with zipfile.ZipFile(file_path, 'r') as zf:
+            for name in zf.namelist():
+                if name.endswith('.xml'):
+                    with zf.open(name) as f:
+                        root = ET.parse(f).getroot()
+                        for zap in root.findall('ZAP'):
+                            if zap.findtext('STATUS') != '1':
+                                continue
+                            p = PatientRecord.from_xml(zap)
+                            if p.is_valid:
+                                local_set.add(p.full_key)
+    except Exception as e:
+        print(f'Ошибка при обработке {file_path}: {e}')
+    return local_set
+
+
+async def get_successful_attachments_async(
+        rpn_in_dir: str, code_mo: str, date_range: tuple
+) -> set:
+    """
+    Асинхронно собирает успешные прикрепления из всех RPNF-файлов.
+    Файлы обрабатываются параллельно.
+    """
+    file_paths = rpnf_list(rpn_in_dir, code_mo, detach=False, date_range=date_range)
+    if not file_paths:
+        return set()
+
+    tasks = [_process_one_rpnf_for_success(p) for p in file_paths]
+    results = await asyncio.gather(*tasks)
+    # Объединяем все множества
+    all_success = set()
+    for res in results:
+        all_success.update(res)
+    return all_success
+
+
+# ====== Аналогично для failed ======
+
+async def _process_one_frpn(file_path: str, archive_dir: str) -> tuple:
+    """
+    Обрабатывает один FRPNM файл.
+    Возвращает (failed_data_dict, failed_rpnf_set) – частичные результаты.
+    """
+    async with _FILE_SEM:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, _parse_frpn_and_linked_rpnm, file_path, archive_dir
+        )
+
+
+def _parse_frpn_and_linked_rpnm(frpn_path: str, archive_dir: str) -> tuple:
+    """Синхронная обработка одного FRPNM и связанного с ним RPNM из архива."""
+    local_failed_data = {}
+    local_failed_rpnf = set()
+
+    try:
+        root = parse_zip_xml(frpn_path)  # синхронная, но мы уже в потоке
+    except Exception as e:
+        print(f'Ошибка FRPNM {frpn_path}: {e}')
+        return local_failed_data, local_failed_rpnf
+
+    fname_i = root.findtext('FNAME_I', '')
+    if not fname_i:
+        return local_failed_data, local_failed_rpnf
+
+    # Собираем ошибки из FRPNM: UID -> (поле, старое_значение)
+    error_by_uid = {}
+    for pr in root.findall('PR'):
+        uid = pr.findtext('UID', '')
+        im_pol = pr.findtext('IM_POL', '')
+        comment = pr.findtext('COMMENT', '')
+        old_value = comment.split()[0] if comment else ''
+        if uid and im_pol:
+            error_by_uid[uid] = (im_pol, old_value)
+
+    if not error_by_uid:
+        return local_failed_data, local_failed_rpnf
+
+    # Ищем связанный RPNM в архиве
+    rpnm_path = os.path.join(archive_dir, f'{fname_i}.zip')
+    if not os.path.exists(rpnm_path):
+        print(f'Файл не найден: {rpnm_path}')
+        return local_failed_data, local_failed_rpnf
+
+    try:
+        with zipfile.ZipFile(rpnm_path, 'r') as zf:
+            for name in zf.namelist():
+                if name.endswith('.xml'):
+                    with zf.open(name) as f:
+                        doc = ET.parse(f).getroot()
+                        for zap in doc.findall('ZAP'):
+                            uid = zap.findtext('UID', '')
+                            if uid in error_by_uid:
+                                p = PatientRecord.from_xml(zap)
+                                if p.is_valid:
+                                    error_field, old_val = error_by_uid[uid]
+                                    local_failed_data[(p.enp, p.bp)] = {
+                                        'field': error_field,
+                                        'old_value': old_val
+                                    }
+    except Exception as e:
+        print(f'Ошибка при чтении {rpnm_path}: {e}')
+
+    return local_failed_data, local_failed_rpnf
+
+
+async def get_failed_attachments_async(
+        rpn_in_dir: str, archive_dir: str, code_mo: str, date_range: tuple
+) -> tuple:
+    """Асинхронно собирает ошибки из всех FRPNM и RPNF."""
+    # Сначала ошибки из FRPNM
+    frpn_paths = frpn_list(rpn_in_dir, code_mo, date_range=date_range)
+    frpn_tasks = [_process_one_frpn(p, archive_dir) for p in frpn_paths]
+    frpn_results = await asyncio.gather(*frpn_tasks)
+
+    failed_data = {}
+    for fd, _ in frpn_results:
+        failed_data.update(fd)
+
+    # Затем ошибки из RPNF (STATUS=0) – их можно собирать параллельно
+    rpnf_paths = rpnf_list(rpn_in_dir, code_mo, detach=False, date_range=date_range)
+    rpnf_tasks = [_process_one_rpnf_for_failed(p) for p in rpnf_paths]
+    rpnf_sets = await asyncio.gather(*rpnf_tasks)
+
+    failed_rpnf = set()
+    for fs in rpnf_sets:
+        failed_rpnf.update(fs)
+
+    return failed_data, failed_rpnf
+
+
+async def _process_one_rpnf_for_failed(file_path: str) -> set:
+    """Обрабатывает один RPNF для сбора failed (STATUS=0)."""
+    async with _FILE_SEM:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _parse_rpnf_for_failed, file_path)
+
+
+def _parse_rpnf_for_failed(file_path: str) -> set:
+    local = set()
+    try:
+        with zipfile.ZipFile(file_path, 'r') as zf:
+            for name in zf.namelist():
+                if name.endswith('.xml'):
+                    with zf.open(name) as f:
+                        root = ET.parse(f).getroot()
+                        for zap in root.findall('ZAP'):
+                            if zap.findtext('STATUS') != '0':
+                                continue
+                            p = PatientRecord.from_xml(zap)
+                            if p.is_valid:
+                                local.add(p.full_key)
+    except Exception as e:
+        print(f'Ошибка при обработке {file_path}: {e}')
+    return local
 
 
 # --------------- Поиск файлов ---------------
@@ -120,7 +296,8 @@ def parse_zip_xml(zip_path: str) -> ET.Element:
 
 # --------------- Сбор данных ---------------
 
-def get_successful_attachments(
+# def get_successful_attachments(
+async def get_successful_attachments(
         rpn_in_dir: str, code_mo: str, date_range: Tuple[str, str]
 ) -> Set[Tuple]:
     """Множество full_key успешных прикреплений (STATUS=1) из RPNF."""
@@ -138,7 +315,8 @@ def get_successful_attachments(
     return result
 
 
-def get_failed_attachments(
+# def get_failed_attachments(
+async def get_failed_attachments(
         rpn_in_dir: str, archive_dir: str, code_mo: str, date_range: Tuple[str, str]
 ) -> Tuple[dict, set]:
     """
@@ -219,7 +397,8 @@ def get_failed_attachments(
 
 # --------------- Фильтрация ---------------
 
-def filter_new_attachments(
+# def filter_new_attachments(
+async def filter_new_attachments(
         patients: List[PatientRecord],
         successful: Set[Tuple],
         failed_data: dict,  # пример {(enp, bp): {'field': 'OKATO', 'old_value': '71140'}}
@@ -272,7 +451,8 @@ def filter_new_attachments(
 
 # --------------- Формирование файла ---------------
 
-def build_output_zip(
+# def build_output_zip(
+async def build_output_zip(
         source_root: ET.Element,
         filtered_patients: List[PatientRecord],
         zip_name: str,  # имя файла от сервера, например RPNM830004262604122.zip
@@ -370,7 +550,7 @@ def find_missing_patients(
     for item in successful:
         # item = (fam, im, ot, dr, enp, bp)
         if len(item) == 6:
-            fam, im, ot, dr, _, _, = item
+            fam, im, ot, dr, _, _ = item
             if fam and im and dr:  # только если есть ФИО и дата
                 key = f'{normalize_string(fam)}_{normalize_string(im)}_{normalize_string(ot)}_{normalize_date(dr)}'
                 successful_keys.add(key)
