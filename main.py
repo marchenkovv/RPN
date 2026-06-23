@@ -1,6 +1,7 @@
 import asyncio
 import io
 import os
+import time
 import zipfile
 # noinspection PyPep8Naming
 import xml.etree.ElementTree as ET
@@ -9,11 +10,11 @@ from dotenv import load_dotenv
 
 from api.ecp_api import AsyncECP
 from file_utils import (
-    get_successful_attachments,
-    get_failed_attachments,
+    get_successful_attachments_async,
+    get_failed_attachments_async,
     filter_new_attachments,
     build_output_zip,
-    save_files, find_missing_patients, rpnf_list, iter_zap_from_zip,
+    save_files, find_missing_patients, iter_zap_from_zip,
 )
 from models import PatientRecord
 
@@ -60,10 +61,10 @@ async def main():
 
     # --- 1. Сбор уже обработанных ---
     print('\n[1/4] Сбор успешных прикреплений...')
-    successful = get_successful_attachments(rpn_in, code_mo, date_range)
+    successful = await get_successful_attachments_async(rpn_in, code_mo, date_range)
 
     print('\n[2/4] Сбор ошибок из FRPNM и RPNF...')
-    failed_frpnm, failed_rpnf = get_failed_attachments(rpn_in, archive_dir, code_mo, date_range)
+    failed_frpnm, failed_rpnf = await get_failed_attachments_async(rpn_in, archive_dir, code_mo, date_range)
 
     # --- 2. Скачивание новых данных ---
     print(f'\n[3/4] Запрос данных с сервера ({date_range_str})...')
@@ -78,11 +79,13 @@ async def main():
         original_filename = link.split('/')[-1]
         content = await ecp.download(link)
 
-        # Получаем данные из журнала РПН: Прикрепление
-        ter = await ecp.get_person_card_grid(lpu_id, date_range_str, type_id=1)
-        ped = await ecp.get_person_card_grid(lpu_id, date_range_str, type_id=2)
-        ter_data = ter.get('data') or []
-        ped_data = ped.get('data') or []
+        # Получаем данные из журнала параллельно (два запроса)
+        ter_task = ecp.get_person_card_grid(lpu_id, date_range_str, type_id=1)
+        ped_task = ecp.get_person_card_grid(lpu_id, date_range_str, type_id=2)
+        ter_data, ped_data = await asyncio.gather(ter_task, ped_task)
+
+        ter_data = ter_data.get('data') or []
+        ped_data = ped_data.get('data') or []
         total_data = ter_data + ped_data
 
     # --- 3. Парсинг и фильтрация ---
@@ -102,7 +105,7 @@ async def main():
     ]
 
     # Фильтруем
-    filtered = filter_new_attachments(new_patients, successful, failed_frpnm)
+    filtered = await filter_new_attachments(new_patients, successful, failed_frpnm)
 
     if not filtered:
         print('\nНет пациентов для отправки.')
@@ -111,15 +114,13 @@ async def main():
     # --- 4. Формирование и сохранение ---
     print('\n[4/4] Сохранение...')
 
-    zip_name, zip_buf = build_output_zip(source_root, filtered, original_filename)
+    zip_name, zip_buf = await build_output_zip(source_root, filtered, original_filename)
     save_files(zip_buf, zip_name, rpn_out, archive_dir)
 
     print(f'\n✅ Готово! Отправлено: {len(filtered)}, файл: {zip_name}')
 
-    # --- Собираем всех, кто будет в системе (уже прикреплённые + новые) ---
     print('\n[4/5] Итоговая статистика:')
 
-    # После фильтрации
     missing = find_missing_patients(total_data, successful, filtered)
 
     print(f'Период: {date_range_str}')
@@ -165,8 +166,11 @@ async def main():
         print(f'\nПолный список сохранён в missing_patients.json')
 
     print(f'\nСписок RPNF записей по которым были ошибки:')
-    for row in sorted(failed_rpnf, key=lambda x:x[1]):
+    for row in sorted(failed_rpnf, key=lambda x: x[1]):
         print(row)
 
+
 if __name__ == '__main__':
+    start = time.time()
     asyncio.run(main())
+    print(time.time() - start)
