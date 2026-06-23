@@ -208,7 +208,7 @@ class TFOMS:
 
         def __init__(self, base_url: str, login: str, password: str):
             super().__init__(base_url, login, password)
-            self.api_base_url = self.base_url.replace(':89', ':88') + '/api/insurance/search'
+            self.api_base_url = self.base_url + '/api/insurance/search'
 
         async def authenticate(self):
             """
