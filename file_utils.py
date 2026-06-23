@@ -7,7 +7,6 @@ import asyncio
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Tuple, Set, List, Optional
-from concurrent.futures import ThreadPoolExecutor
 from models import PatientRecord
 
 # Глобальный семафор для контроля параллелизма
@@ -45,9 +44,7 @@ def _parse_rpnf_for_success(file_path: str) -> set:
     return local_set
 
 
-async def get_successful_attachments_async(
-        rpn_in_dir: str, code_mo: str, date_range: tuple
-) -> set:
+async def get_successful_attachments_async(rpn_in_dir: str, code_mo: str, date_range: tuple) -> set:
     """
     Асинхронно собирает успешные прикрепления из всех RPNF-файлов.
     Файлы обрабатываются параллельно.
@@ -135,9 +132,7 @@ def _parse_frpn_and_linked_rpnm(frpn_path: str, archive_dir: str) -> tuple:
     return local_failed_data, local_failed_rpnf
 
 
-async def get_failed_attachments_async(
-        rpn_in_dir: str, archive_dir: str, code_mo: str, date_range: tuple
-) -> tuple:
+async def get_failed_attachments_async(rpn_in_dir: str, archive_dir: str, code_mo: str, date_range: tuple) -> tuple:
     """Асинхронно собирает ошибки из всех FRPNM и RPNF."""
     # Сначала ошибки из FRPNM
     frpn_paths = frpn_list(rpn_in_dir, code_mo, date_range=date_range)
@@ -297,9 +292,7 @@ def parse_zip_xml(zip_path: str) -> ET.Element:
 # --------------- Сбор данных ---------------
 
 # def get_successful_attachments(
-async def get_successful_attachments(
-        rpn_in_dir: str, code_mo: str, date_range: Tuple[str, str]
-) -> Set[Tuple]:
+async def get_successful_attachments(rpn_in_dir: str, code_mo: str, date_range: Tuple[str, str]) -> Set[Tuple]:
     """Множество full_key успешных прикреплений (STATUS=1) из RPNF."""
     result = set()
     for path in rpnf_list(rpn_in_dir, code_mo, detach=False, date_range=date_range):
@@ -316,9 +309,7 @@ async def get_successful_attachments(
 
 
 # def get_failed_attachments(
-async def get_failed_attachments(
-        rpn_in_dir: str, archive_dir: str, code_mo: str, date_range: Tuple[str, str]
-) -> Tuple[dict, set]:
+async def get_failed_attachments(rpn_in_dir: str, archive_dir: str, code_mo: str, date_range: Tuple[str, str]) -> Tuple[dict, set]:
     """
     Returns:
         - failed_data: dict {(enp, bp): {'field': 'OKATO', 'old_value': '71140'}}
@@ -429,7 +420,7 @@ async def filter_new_attachments(
             old_value = error_info['old_value']
 
             # Получаем текущее значение поля
-            field_name = error_field.lower()
+            # field_name = error_field.lower()
             current_value = getattr(p, error_field.lower(), '')
 
             # Сравниваем
