@@ -62,14 +62,14 @@ async def main():
     date_range = (date_from, date_to)
 
     # --- 1. Сбор уже обработанных ---
-    print('\n[1/4] Сбор успешных прикреплений...')
+    print('\n[1/5] Сбор успешных прикреплений...')
     successful = await get_successful_attachments_async(rpn_in, code_mo, date_range)
 
-    print('\n[2/4] Сбор ошибок из FRPNM и RPNF...')
+    print('\n[2/5] Сбор ошибок из FRPNM и RPNF...')
     failed_frpnm, failed_rpnf = await get_failed_attachments_async(rpn_in, archive_dir, code_mo, date_range)
 
     # --- 2. Скачивание новых данных ---
-    print(f'\n[3/4] Запрос данных с сервера ({date_range_str})...')
+    print(f'\n[3/5] Запрос данных с сервера ({date_range_str})...')
 
     async with AsyncECP(server, login, password) as ecp:
         result = await ecp.service_attachment(lpu_id, date_range_str)
@@ -114,14 +114,14 @@ async def main():
         return
 
     # --- 4. Формирование и сохранение ---
-    print('\n[4/4] Сохранение...')
+    print('\n[4/5] Сохранение...')
 
     zip_name, zip_buf = await build_output_zip(source_root, filtered, original_filename)
     save_files(zip_buf, zip_name, rpn_out, archive_dir)
 
     print(f'\n✅ Готово! Отправлено: {len(filtered)}, файл: {zip_name}')
 
-    print('\n[4/5] Итоговая статистика:')
+    print('\n[5/5] Итоговая статистика:')
 
     missing = find_missing_patients(total_data, successful, filtered)
 
