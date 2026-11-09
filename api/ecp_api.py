@@ -156,3 +156,19 @@ class AsyncECP:
             'PersonCard_id': person_card_id,
             'attrObjects': [{'object': 'PersonCardEditWindow', 'identField': 'PersonCard_id'}],
         })
+
+    async def get_person_search_grid(self, surname, firname, secname, birthday, limit: int = 500):
+        """Человек: Поиск - поиск пациентов по различным данным"""
+        url = f'{self.url}/?c=Person&m=getPersonSearchGrid'
+        return await self._request('POST', url, data={
+            'PersonSurName_SurName': surname,
+            'PersonFirName_FirName': firname,
+            'PersonSecName_SecName': secname,
+            'PersonBirthDay_BirthDay': birthday,
+            'showAll': 2,  # 2 - показывать умерших
+            'searchMode': 'all',
+            'allowOverLimit': 1,
+            'start': 0,
+            'limit': limit,
+            'page': 1
+        })
