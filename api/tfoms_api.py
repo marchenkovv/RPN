@@ -63,6 +63,8 @@ class TFOMS:
                 raise RuntimeError('Ошибка авторизации. Токен устарел или недействителен')
             elif response.status_code == 429:
                 raise RuntimeError('Слишком много запросов. Попробуйте позже')
+            elif response.status_code == 403:
+                raise RuntimeError('Доступ запрещен: пользователь не аутентифицирован')
             response.raise_for_status()
 
         async def __aenter__(self):
