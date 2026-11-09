@@ -209,6 +209,7 @@ class TFOMS:
         def __init__(self, base_url: str, login: str, password: str):
             super().__init__(base_url, login, password)
             self.api_base_url = self.base_url + '/api/insurance/search'
+            self._semaphore = asyncio.Semaphore(5)
 
         async def authenticate(self):
             """
