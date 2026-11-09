@@ -1,6 +1,7 @@
 import asyncio
 import io
 import os
+import re
 import time
 import zipfile
 # noinspection PyPep8Naming
@@ -134,8 +135,12 @@ async def main():
     print(f'После фильтрации новых в выгрузке: {len(filtered)}')
     print(f'Отсутствуют выгрузке: {len(missing)}')
 
-    # Ошибки из предыдущей отправки
-    last_rpn = os.listdir(rpn_in)[-1:][0]
+    # Проверяем ошибки из предыдущей отправки
+    last_rpn = [
+        rpn for rpn in os.listdir(rpn_in)
+        if not os.path.isdir(os.path.join(rpn_in, rpn))
+           and not re.search(r'(?<!\d)1\.zip$', rpn)
+    ][-1]
     last_rpn_errors = set()
 
     try:
