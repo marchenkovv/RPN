@@ -275,9 +275,10 @@ class TFOMS:
             if not self.client:
                 raise RuntimeError('Клиент не инициализирован. Сначала вызовите authenticate()')
 
-            await self._wait_if_needed()
-            response = await self.client.get(self.api_base_url, params=params)
-            self._check_response_status(response)
+            async with self._semaphore:
+                await self._wait_if_needed()
+                response = await self.client.get(self.api_base_url, params=params)
+                self._check_response_status(response)
             return response.json()
 
         async def fio(self, surname: str, name: str, birth_date: str, patronymic: str | None = None) -> dict:
