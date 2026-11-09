@@ -5,7 +5,7 @@ import time
 import zipfile
 # noinspection PyPep8Naming
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 from api.ecp_api import AsyncECP
@@ -33,6 +33,12 @@ def get_current_year_range():
     return first.strftime('%d.%m.%Y'), today.strftime('%d.%m.%Y')
 
 
+def get_current_week_range():
+    today = datetime.now()
+    week_ago = today - timedelta(days=7)
+    return week_ago.strftime('%d.%m.%Y'), today.strftime('%d.%m.%Y')
+
+
 async def main():
     # --- Конфигурация ---
     code_mo = os.getenv('CODE_MO_TFOMS')
@@ -51,12 +57,8 @@ async def main():
     for d in (rpn_in, rpn_out, archive_dir):
         os.makedirs(d, exist_ok=True)
 
-    date_from, date_to = get_current_month_range()
+    date_from, date_to = get_current_week_range()
     date_range_str = f'{date_from} - {date_to}'
-
-    # date_from, date_to = get_current_year_range()
-    # date_range_str = f'01.01.2026 - {date_to}'
-
     date_range = (date_from, date_to)
 
     # --- 1. Сбор уже обработанных ---
