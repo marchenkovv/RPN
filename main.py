@@ -172,9 +172,9 @@ async def main():
             json.dump(missing, f, ensure_ascii=False, indent=2)
         print(f'\nПолный список сохранён в missing_patients.json')
 
-    print(f'\nСписок RPNF записей по которым были ошибки:')
-    for row in sorted(failed_rpnf, key=lambda x: x[1]):
-        print(row)
+    # print(f'\nСписок RPNF записей по которым были ошибки:')
+    # for row in sorted(failed_rpnf, key=lambda x: x[1]):
+    #     print(row)
 
 
 if __name__ == '__main__':
