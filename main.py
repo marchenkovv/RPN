@@ -166,16 +166,6 @@ async def main():
             print(
                 f'   {m.get("Person_SurName")} {m.get("Person_FirName")} {m.get("Person_SecName")} ({m.get("PersonBirthDay")}) person_id: {m.get("Person_id")}')
 
-        # Сохраним в файл для анализа, вдруг пригодится
-        import json
-        with open('missing_patients.json', 'w', encoding='utf-8') as f:
-            json.dump(missing, f, ensure_ascii=False, indent=2)
-        print(f'\nПолный список сохранён в missing_patients.json')
-
-    # print(f'\nСписок RPNF записей по которым были ошибки:')
-    # for row in sorted(failed_rpnf, key=lambda x: x[1]):
-    #     print(row)
-
 
 if __name__ == '__main__':
     start = time.time()
